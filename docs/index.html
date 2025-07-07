@@ -16,46 +16,40 @@
   <canvas id="chart" width="800" height="400"></canvas>
 
   <script>
-    // Configuration: which sets to chart
-    const SETS = ['sv3', 'sv2'];
+  const SET_ID       = 'sv2';
+  const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
+  let chart;  // we'll reuse this for redraws
+  
+  async function fetchSeries() {
+    const resp = await fetch(`${STORAGE_BASE}/${SET_ID}.json`);
+    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+    return resp.json();
+  }
 
-    // Base URL of your static-website-enabled storage
-    const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
+  function formatTime(ts) {
+    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' });
+  }
 
+  async function buildChart() {
+    const series = await fetchSeries();
+    if (!series || series.length < 1) return;
 
-    async function fetchData(setId) {
-      const resp = await fetch(`${STORAGE_BASE}/${setId}.json`);
-      if (!resp.ok) {
-        console.error(`Failed to fetch ${setId}:`, resp.status);
-        return null;
-      }
-      return resp.json();
-    }
+    const labels = series.map(pt => formatTime(pt.timestamp));
+    const data   = series.map(pt => pt.index_usd);
 
-    async function buildChart() {
-      // Fetch all data in parallel
-      const results = await Promise.all(SETS.map(fetchData));
-      // Filter out any nulls
-      const data = results.filter(r => r);
-
-      if (!data.length) {
-        document.body.insertAdjacentHTML('beforeend',
-          '<p>Error: no data available.</p>');
-        return;
-      }
-
-      // Assume all have same timestamps (they update together)
-      const labels = data.map(r => new Date(r.timestamp).toLocaleString());
-      const values = data.map(r => r.index_usd);
-
-      // Create the Chart.js line chart
-      new Chart(document.getElementById('chart').getContext('2d'), {
+    const ctx = document.getElementById('chart').getContext('2d');
+    if (chart) {
+      chart.data.labels = labels;
+      chart.data.datasets[0].data = data;
+      chart.update();
+    } else {
+      chart = new Chart(ctx, {
         type: 'line',
         data: {
           labels,
           datasets: [{
-            label: `${SETS.join(', ')} Index (USD)`,
-            data: values,
+            label: 'Paldea Evolved Index (Top-10 Avg)',
+            data,
             fill: false,
             tension: 0.1,
             borderWidth: 2
@@ -69,9 +63,12 @@
         }
       });
     }
+  }
 
-    // Kick it off
-    buildChart().catch(console.error);
-  </script>
+  // Initial draw and auto-refresh every 30 min
+  buildChart().catch(console.error);
+  setInterval(buildChart, 30 * 60 * 1000);
+</script>
+
 </body>
 </html>
