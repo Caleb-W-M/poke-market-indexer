@@ -17,13 +17,13 @@
     }
     #container {
       max-width: 900px;
-      max-height: 600px;      /* prevent excessive vertical growth */
+      max-height: 600px;      /* constrain chart area */
       margin: 2rem auto;
       padding: 1rem;
       background: #fff;
       border-radius: 8px;
       box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      overflow: hidden;
+      /* overflow: hidden;  removed so details can scroll */
     }
     h1 {
       text-align: center;
@@ -51,8 +51,8 @@
     }
     #details {
       margin-top: 1rem;
+      max-height: 250px;      /* allow scrolling if many cards */
       overflow-y: auto;
-      max-height: 200px;
     }
     table {
       width: 100%;
@@ -152,7 +152,7 @@
         },
         options: {
           responsive: true,
-          maintainAspectRatio: true,  // respect canvas aspect
+          maintainAspectRatio: true,
           plugins: {
             legend: { display: true, position: 'top' },
             tooltip: {
@@ -190,7 +190,6 @@
 
       if (chart) chart.destroy();
       chart = new Chart(ctx, config);
-      // default drill-down on last point
       renderDetails(history[history.length - 1]);
     }
 
@@ -206,7 +205,6 @@
       }
     });
 
-    // initial render and auto-refresh every 30 minutes
     buildChart().catch(console.error);
     setInterval(buildChart, 30 * 60 * 1000);
   </script>
