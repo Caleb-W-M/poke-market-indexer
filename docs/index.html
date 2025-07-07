@@ -2,48 +2,77 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
   <title>Poké Market Index Dashboard</title>
-  <!-- Chart.js from CDN -->
+  <!-- Chart.js CDN -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
   <style>
     body { font-family: sans-serif; padding: 1rem; }
     canvas { max-width: 800px; margin: 2rem auto; display: block; }
+    #details { max-width: 800px; margin: 1rem auto; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 0.5rem;
+    }
+    th, td {
+      border-bottom: 1px solid #ddd;
+      padding: 0.5rem;
+    }
+    th { text-align: left; }
+    td { text-align: right; }
   </style>
 </head>
 <body>
-  <h1>Poké Market Index</h1>
+  <h1>Paldea Evolved Index (Top-10 Avg)</h1>
   <canvas id="chart" width="800" height="400"></canvas>
+  <div id="details"></div>
 
   <script>
-  const SET_ID       = 'sv2';
-  const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
-  let chart;  // we'll reuse this for redraws
-  
-  async function fetchSeries() {
-    const resp = await fetch(`${STORAGE_BASE}/${SET_ID}.json`);
-    if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-    return resp.json();
-  }
+    const SET_ID       = 'sv2';
+    const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
+    let chart, history = [];
 
-  function formatTime(ts) {
-    return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' });
-  }
+    async function fetchSeries() {
+      const resp = await fetch(`${STORAGE_BASE}/${SET_ID}.json`);
+      if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
+      return resp.json();
+    }
 
-  async function buildChart() {
-    const series = await fetchSeries();
-    if (!series || series.length < 1) return;
+    function formatTime(ts) {
+      return new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute:'2-digit' });
+    }
 
-    const labels = series.map(pt => formatTime(pt.timestamp));
-    const data   = series.map(pt => pt.index_usd);
+    function renderDetails(snapshot) {
+      const container = document.getElementById('details');
+      if (!snapshot || !snapshot.top_cards) {
+        container.innerHTML = '<p>No details available.</p>';
+        return;
+      }
+      const rows = snapshot.top_cards.map(c =>
+        `<tr><td>${c.name}</td><td>$${c.price.toFixed(2)}</td></tr>`
+      ).join('');
 
-    const ctx = document.getElementById('chart').getContext('2d');
-    if (chart) {
-      chart.data.labels = labels;
-      chart.data.datasets[0].data = data;
-      chart.update();
-    } else {
-      chart = new Chart(ctx, {
+      container.innerHTML = `
+        <h2>Top ${snapshot.top_cards.length} Cards at ${formatTime(snapshot.timestamp)}</h2>
+        <table>
+          <thead>
+            <tr><th>Name</th><th>Price (USD)</th></tr>
+          </thead>
+          <tbody>${rows}</tbody>
+        </table>
+      `;
+    }
+
+    async function buildChart() {
+      history = await fetchSeries();
+      if (!history || history.length === 0) return;
+
+      const labels = history.map(pt => formatTime(pt.timestamp));
+      const data   = history.map(pt => pt.index_usd);
+      const ctx    = document.getElementById('chart').getContext('2d');
+
+      const config = {
         type: 'line',
         data: {
           labels,
@@ -59,16 +88,27 @@
           scales: {
             x: { title: { display: true, text: 'Time' } },
             y: { title: { display: true, text: 'Index (USD)' } }
+          },
+          onClick: (evt, elements) => {
+            if (elements.length > 0) {
+              const idx = elements[0].index;
+              renderDetails(history[idx]);
+            }
           }
         }
-      });
+      };
+
+      // Destroy and recreate so updates work reliably
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, config);
+
+      // Show details for the latest point by default
+      renderDetails(history[history.length - 1]);
     }
-  }
 
-  // Initial draw and auto-refresh every 30 min
-  buildChart().catch(console.error);
-  setInterval(buildChart, 30 * 60 * 1000);
-</script>
-
+    // Initial draw and auto-refresh every 30 minutes
+    buildChart().catch(console.error);
+    setInterval(buildChart, 30 * 60 * 1000);
+  </script>
 </body>
 </html>
