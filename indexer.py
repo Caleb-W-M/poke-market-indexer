@@ -55,15 +55,23 @@ def append_snapshot(set_id: str, snapshot: dict) -> None:
     )
     try:
         existing = blob.download_blob().readall()
-        history = json.loads(existing)
+        data = json.loads(existing)
+        if isinstance(data, list):
+            history = data
+        elif isinstance(data, dict):
+            # Previous runs wrote a single object—wrap it
+            history = [data]
+        else:
+            history = []
     except Exception:
         history = []
 
     history.append(snapshot)
-    # Keep only the last 500 points to avoid runaway file size
+    # Optionally cap size
     history = history[-500:]
 
     blob.upload_blob(json.dumps(history), overwrite=True)
+
 
 # ─── Main entrypoint ─────────────────────────────────────────────────
 
