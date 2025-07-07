@@ -9,6 +9,12 @@ jobs:
   build-and-run:
     runs-on: ubuntu-latest
 
+    # ← Add this block
+    env:
+      AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
+      AZURE_STORAGE_KEY:     ${{ secrets.AZURE_STORAGE_KEY }}
+      POKEMONTCG_API_KEY:    ${{ secrets.POKEMONTCG_API_KEY }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v3
