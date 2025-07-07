@@ -29,22 +29,28 @@ def get_top_n_cards(set_id: str, n: int = TOP_N):
         resp = requests.get(url, params=params, headers=headers, timeout=15)
         data = resp.json()
         for card in data.get("data", []):
-            name = card.get("name")
-            # find first market price
-            price = None
-            for finish in card.get("tcgplayer", {}).get("prices", {}).values():
-                if finish and finish.get("market"):
-                    price = finish["market"]
-                    break
-            if price is not None:
-                cards.append({"name": name, "price": price})
+            name   = card.get("name")
+            prices = card.get("tcgplayer", {}).get("prices", {})
+            # Gather all available market prices
+            markets = [
+                finish["market"]
+                for finish in prices.values()
+                if finish and finish.get("market") is not None
+            ]
+            if not markets:
+                continue
+            # Pick the highest market price across finishes
+            best_price = max(markets)
+            cards.append({"name": name, "price": best_price})
         url = data.get("nextPage")
 
-    # sort by price descending, take top N
+    if not cards:
+        return None, []
+
     top = sorted(cards, key=lambda c: c["price"], reverse=True)[:n]
-    # compute average
-    avg = round(sum(c["price"] for c in top) / len(top), 2) if top else None
+    avg = round(sum(c["price"] for c in top) / len(top), 2)
     return avg, top
+
 
 # ─── Helper to append a snapshot to your history blob ───────────────
 
