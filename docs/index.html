@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Poké Market Index Dashboard</title>
+  <!-- Chart.js from CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: sans-serif; padding: 1rem; }
+    canvas { max-width: 800px; margin: 2rem auto; display: block; }
+  </style>
+</head>
+<body>
+  <h1>Poké Market Index</h1>
+  <canvas id="chart" width="800" height="400"></canvas>
+
+  <script>
+    // Configuration: which sets to chart
+    const SETS = ['sv3', 'sv2'];
+
+    // Base URL of your static-website-enabled storage
+    const STORAGE_BASE = 'https://tcgmarketstoragecm1.z22.web.core.windows.net/indexes';
+
+    async function fetchData(setId) {
+      const resp = await fetch(`${STORAGE_BASE}/${setId}.json`);
+      if (!resp.ok) {
+        console.error(`Failed to fetch ${setId}:`, resp.status);
+        return null;
+      }
+      return resp.json();
+    }
+
+    async function buildChart() {
+      // Fetch all data in parallel
+      const results = await Promise.all(SETS.map(fetchData));
+      // Filter out any nulls
+      const data = results.filter(r => r);
+
+      if (!data.length) {
+        document.body.insertAdjacentHTML('beforeend',
+          '<p>Error: no data available.</p>');
+        return;
+      }
+
+      // Assume all have same timestamps (they update together)
+      const labels = data.map(r => new Date(r.timestamp).toLocaleString());
+      const values = data.map(r => r.index_usd);
+
+      // Create the Chart.js line chart
+      new Chart(document.getElementById('chart').getContext('2d'), {
+        type: 'line',
+        data: {
+          labels,
+          datasets: [{
+            label: `${SETS.join(', ')} Index (USD)`,
+            data: values,
+            fill: false,
+            tension: 0.1,
+            borderWidth: 2
+          }]
+        },
+        options: {
+          scales: {
+            x: { title: { display: true, text: 'Time' } },
+            y: { title: { display: true, text: 'Index (USD)' } }
+          }
+        }
+      });
+    }
+
+    // Kick it off
+    buildChart().catch(console.error);
+  </script>
+</body>
+</html>
