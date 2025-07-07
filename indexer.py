@@ -19,30 +19,32 @@ TOP_N     = 10      # Average the top 10 prices
 
 # ─── Helper to compute the Top-N mean price ─────────────────────────
 
-def get_top_n_avg_price(set_id: str, n: int = TOP_N) -> float | None:
+def get_top_n_cards(set_id: str, n: int = TOP_N):
     url     = "https://api.pokemontcg.io/v2/cards"
     params  = {"q": f"set.id:{set_id}", "pageSize": 250}
     headers = {"X-Api-Key": PKIO}
-    prices  = []
+    cards   = []
 
-    # Paginate through all cards
     while url:
         resp = requests.get(url, params=params, headers=headers, timeout=15)
         data = resp.json()
         for card in data.get("data", []):
-            # Pick the first market price available
+            name = card.get("name")
+            # find first market price
+            price = None
             for finish in card.get("tcgplayer", {}).get("prices", {}).values():
                 if finish and finish.get("market"):
-                    prices.append(finish["market"])
+                    price = finish["market"]
                     break
+            if price is not None:
+                cards.append({"name": name, "price": price})
         url = data.get("nextPage")
 
-    if not prices:
-        return None
-
-    # Sort descending and average the top `n`
-    top_prices = sorted(prices, reverse=True)[:n]
-    return round(sum(top_prices) / len(top_prices), 2)
+    # sort by price descending, take top N
+    top = sorted(cards, key=lambda c: c["price"], reverse=True)[:n]
+    # compute average
+    avg = round(sum(c["price"] for c in top) / len(top), 2) if top else None
+    return avg, top
 
 # ─── Helper to append a snapshot to your history blob ───────────────
 
@@ -77,17 +79,18 @@ def append_snapshot(set_id: str, snapshot: dict) -> None:
 
 def main():
     now = datetime.now(timezone.utc).isoformat(timespec="seconds")
-    avg = get_top_n_avg_price(SET_ID)
+    avg, top_cards = get_top_n_cards(SET_ID, n=TOP_N)
     if avg is None:
-        print(f"No prices found for set {SET_ID} at {now}")
+        print(f"No prices for {SET_ID} at {now}")
         return
 
     snapshot = {
         "timestamp": now,
-        "index_usd": avg
+        "index_usd": avg,
+        "top_cards": top_cards
     }
     append_snapshot(SET_ID, snapshot)
-    print(f"Appended snapshot for {SET_ID} at {now}: {avg}")
+    print(f"Appended {SET_ID}@{now}: {avg} with {len(top_cards)} cards")
 
 if __name__ == "__main__":
     main()
