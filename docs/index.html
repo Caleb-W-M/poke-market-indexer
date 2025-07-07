@@ -20,7 +20,8 @@
     const SETS = ['sv3', 'sv2'];
 
     // Base URL of your static-website-enabled storage
-    const STORAGE_BASE = 'https://tcgmarketstoragecm1.z22.web.core.windows.net/indexes';
+    const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
+
 
     async function fetchData(setId) {
       const resp = await fetch(`${STORAGE_BASE}/${setId}.json`);
