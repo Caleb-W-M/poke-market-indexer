@@ -1,212 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width,initial-scale=1" />
-  <title>Poké Market Index Dashboard</title>
-  <!-- Chart.js + Zoom plugin -->
+  <meta charset="UTF-8" /><meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Iono Market Price Over Time</title>
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-  <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2.0.1/dist/chartjs-plugin-zoom.min.js"></script>
-  <style>
-    body {
-      font-family: sans-serif;
-      background: #f5f5f5;
-      margin: 0;
-      padding: 1rem;
-      color: #333;
-    }
-    #container {
-      max-width: 900px;
-      max-height: 600px;      /* constrain chart area */
-      margin: 2rem auto;
-      padding: 1rem;
-      background: #fff;
-      border-radius: 8px;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.1);
-      /* overflow: hidden;  removed so details can scroll */
-    }
-    h1 {
-      text-align: center;
-      margin: 0 0 1rem;
-    }
-    #controls {
-      text-align: right;
-      margin-bottom: 0.5rem;
-    }
-    #controls button {
-      margin-left: 0.5rem;
-      padding: 0.4rem 0.8rem;
-      font-size: 0.9rem;
-    }
-    canvas {
-      width: 100% !important;
-      height: auto !important;
-      display: block;
-    }
-    #last-updated {
-      text-align: right;
-      font-size: 0.9rem;
-      color: #666;
-      margin-top: 0.5rem;
-    }
-    #details {
-      margin-top: 1rem;
-      max-height: 250px;      /* allow scrolling if many cards */
-      overflow-y: auto;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      margin-top: 0.5rem;
-    }
-    th, td {
-      border-bottom: 1px solid #ddd;
-      padding: 0.4rem;
-    }
-    th {
-      text-align: left;
-      background: #fafafa;
-    }
-    td {
-      text-align: right;
-    }
-  </style>
+  <style>body{font-family:sans-serif;text-align:center;}canvas{max-width:600px;margin:1rem auto;}</style>
 </head>
 <body>
-  <div id="container">
-    <h1>Paldea Evolved Index (Top-10 Avg)</h1>
-    <div id="controls">
-      <button id="resetZoom">Reset Zoom</button>
-      <button id="download">Download PNG</button>
-    </div>
-    <canvas id="chart"></canvas>
-    <div id="last-updated"></div>
-    <div id="details"></div>
-  </div>
-
+  <h1>Iono – Live Market Price</h1>
+  <canvas id="chart"></canvas>
   <script>
-    const SET_ID       = 'sv2';
-    const STORAGE_BASE = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes';
-    let chart, history = [];
-
-    async function fetchSeries() {
-      const resp = await fetch(`${STORAGE_BASE}/${SET_ID}.json`);
-      if (!resp.ok) throw new Error(`Fetch failed: ${resp.status}`);
-      return resp.json();
-    }
-
-    function formatTime(ts) {
-      return new Date(ts).toLocaleTimeString([], {
-        month: 'short', day: 'numeric',
-        hour: '2-digit', minute: '2-digit'
+    const URL = 'https://tcgmarketstoragecm1.blob.core.windows.net/indexes/Iono.json';
+    let chart;
+    async function draw() {
+      const r = await fetch(URL);
+      const data = await r.json();
+      const labels = data.map(pt => new Date(pt.timestamp).toLocaleTimeString());
+      const prices = data.map(pt => pt.price_usd);
+      const ctx = document.getElementById('chart').getContext('2d');
+      if (chart) chart.destroy();
+      chart = new Chart(ctx, {
+        type: 'line',
+        data: { labels, datasets: [{ label: 'Price (USD)', data: prices }] },
+        options: { scales: { y: { beginAtZero: false } } }
       });
     }
-
-    function formatTooltipTime(ts) {
-      return new Date(ts).toLocaleString();
-    }
-
-    function renderDetails(snapshot) {
-      const container = document.getElementById('details');
-      if (!snapshot || !snapshot.top_cards) {
-        container.innerHTML = '<p>No details available.</p>';
-        return;
-      }
-      const rows = snapshot.top_cards.map(c =>
-        `<tr><td>${c.name}</td><td>$${c.price.toFixed(2)}</td></tr>`
-      ).join('');
-      container.innerHTML = `
-        <h2>Top ${snapshot.top_cards.length} Cards @ ${formatTooltipTime(snapshot.timestamp)}</h2>
-        <table>
-          <thead><tr><th>Name</th><th>Price (USD)</th></tr></thead>
-          <tbody>${rows}</tbody>
-        </table>
-      `;
-    }
-
-    async function buildChart() {
-      history = await fetchSeries();
-      if (!history || !history.length) return;
-
-      const labels = history.map(pt => formatTime(pt.timestamp));
-      const data   = history.map(pt => pt.index_usd);
-
-      document.getElementById('last-updated').textContent =
-        `Data points: ${history.length} • Latest @ ${formatTime(history[history.length-1].timestamp)}`;
-
-      const ctx = document.getElementById('chart').getContext('2d');
-      const config = {
-        type: 'line',
-        data: {
-          labels,
-          datasets: [{
-            label: 'Index (USD)',
-            data,
-            borderColor: '#007bff',
-            backgroundColor: 'rgba(0,123,255,0.1)',
-            fill: true,
-            pointRadius: 4,
-            pointHoverRadius: 6,
-            tension: 0.2
-          }]
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: true,
-          plugins: {
-            legend: { display: true, position: 'top' },
-            tooltip: {
-              mode: 'index',
-              intersect: false,
-              callbacks: {
-                title: items => formatTooltipTime(history[items[0].dataIndex].timestamp),
-                label: item => `Index: $${item.formattedValue}`
-              }
-            },
-            zoom: {
-              pan: { enabled: true, mode: 'x', threshold: 10 },
-              zoom: { wheel: { enabled: true }, pinch: { enabled: true }, mode: 'x' }
-            }
-          },
-          interaction: { mode: 'nearest', intersect: false },
-          scales: {
-            x: {
-              title: { display: true, text: 'Time' },
-              grid: { color: '#eee' }
-            },
-            y: {
-              title: { display: true, text: 'Index (USD)' },
-              grid: { color: '#eee' }
-            }
-          },
-          onClick: (evt, elements) => {
-            if (elements.length > 0) {
-              const idx = elements[0].index;
-              renderDetails(history[idx]);
-            }
-          }
-        }
-      };
-
-      if (chart) chart.destroy();
-      chart = new Chart(ctx, config);
-      renderDetails(history[history.length - 1]);
-    }
-
-    document.getElementById('resetZoom').addEventListener('click', () => {
-      if (chart) chart.resetZoom();
-    });
-    document.getElementById('download').addEventListener('click', () => {
-      if (chart) {
-        const link = document.createElement('a');
-        link.download = 'poke-market-index.png';
-        link.href = chart.toBase64Image();
-        link.click();
-      }
-    });
-
-    buildChart().catch(console.error);
-    setInterval(buildChart, 30 * 60 * 1000);
+    draw();
+    setInterval(draw, 30*60*1000);
   </script>
 </body>
 </html>
