@@ -9,12 +9,11 @@ jobs:
   scrape-and-upload:
     runs-on: ubuntu-latest
 
-    # Make your Azure credentials and card name available to scraper.js
     env:
       AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
       AZURE_STORAGE_KEY:     ${{ secrets.AZURE_STORAGE_KEY }}
-      CARD_NAME:             "Iono"                  # change this to track a different card
-      POKEMONTCG_API_KEY:    ${{ secrets.POKEMONTCG_API_KEY }}  # if your scraper needs it later
+      CARD_NAME:             "Iono"                  
+      POKEMONTCG_API_KEY:    ${{ secrets.POKEMONTCG_API_KEY }}
 
     steps:
       - name: Checkout code
@@ -26,7 +25,7 @@ jobs:
           node-version: '18'
 
       - name: Install scraper dependencies
-        run: npm ci
+        run: npm install
 
       - name: Run Puppeteer scraper
         run: node scraper.js
