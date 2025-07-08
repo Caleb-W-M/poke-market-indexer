@@ -2,8 +2,8 @@ name: Scrape & Upload Card Price
 
 on:
   schedule:
-    - cron: '*/30 * * * *'      # every 30 minutes
-  workflow_dispatch:           # manual trigger
+    - cron: '*/30 * * * *'
+  workflow_dispatch:
 
 jobs:
   scrape-and-upload:
