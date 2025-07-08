@@ -1,27 +1,26 @@
 // scraper.js
-import puppeteer from 'puppeteer';
-import { BlobServiceClient } from '@azure/storage-blob';
+import puppeteer from 'puppeteer-core';
+import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
+import { readFileSync } from 'fs';
 
-// ── CONFIG ────────────────────────────────────────────────────────────
-// The exact card name to scrape (must match TCGplayer’s search results)
+// ── CONFIG ───────────────────────────────────────────────────────────────
 const CARD_NAME = process.env.CARD_NAME || 'Iono';
-// Azure Storage settings from GitHub Secrets / env
-const ACCOUNT    = process.env.AZURE_STORAGE_ACCOUNT;
-const KEY        = process.env.AZURE_STORAGE_KEY;
-const CONTAINER  = 'indexes';
-// How many historical points to keep
+const ACCOUNT   = process.env.AZURE_STORAGE_ACCOUNT;
+const KEY       = process.env.AZURE_STORAGE_KEY;
+const CONTAINER = 'indexes';
 const MAX_POINTS = 500;
-// ───────────────────────────────────────────────────────────────────────
 
+// ── Scrape the live “Market Price” from TCGplayer ────────────────────────
 async function scrapeMarketPrice(name) {
-  const browser = await puppeteer.launch({ args: ['--no-sandbox'] });
-  const page    = await browser.newPage();
-  const url     = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(name)}`;
-
+  const browser = await puppeteer.launch({
+    executablePath: '/usr/bin/google-chrome-stable',
+    args: ['--no-sandbox', '--disable-setuid-sandbox']
+  });
+  const page = await browser.newPage();
+  const url  = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(name)}`;
   await page.goto(url, { waitUntil: 'networkidle2' });
-  // The “Market Price” element selector
   await page.waitForSelector('.price-point--price', { timeout: 8000 });
-  const text = await page.$eval('.price-point--price', el => el.textContent);
+  const text = await page.$eval('.price-point--price', el => el.textContent.trim());
   await browser.close();
 
   const m = text.match(/[\d,]+\.?\d*/);
@@ -29,21 +28,24 @@ async function scrapeMarketPrice(name) {
   return parseFloat(m[0].replace(/,/g, ''));
 }
 
+// ── Append snapshot to Azure Blob (history array) ────────────────────────
 async function appendBlob(snapshot) {
-  const svc   = new BlobServiceClient(
+  const credential = new StorageSharedKeyCredential(ACCOUNT, KEY);
+  const svc        = new BlobServiceClient(
     `https://${ACCOUNT}.blob.core.windows.net`,
-    new Azure.SharedKeyCredential(ACCOUNT, KEY)
+    credential
   );
   const containerClient = svc.getContainerClient(CONTAINER);
   await containerClient.createIfNotExists();
 
   const blobClient = containerClient.getBlobClient(`${CARD_NAME}.json`);
   let history = [];
+
   try {
-    const dl = await blobClient.download();
-    const body = await streamToString(dl.readableStreamBody);
-    history = JSON.parse(body);
-    if (!Array.isArray(history)) history = [history];
+    const download = await blobClient.download(0);
+    const body     = await streamToString(download.readableStreamBody);
+    const data     = JSON.parse(body);
+    history = Array.isArray(data) ? data : [data];
   } catch {
     history = [];
   }
@@ -53,23 +55,28 @@ async function appendBlob(snapshot) {
     history = history.slice(history.length - MAX_POINTS);
   }
 
-  await blobClient.upload(JSON.stringify(history), Buffer.byteLength(JSON.stringify(history)), {
+  const content = JSON.stringify(history, null, 2);
+  await blobClient.upload(content, Buffer.byteLength(content), {
     blobHTTPHeaders: { blobContentType: 'application/json' },
     overwrite: true
   });
 }
 
-// Helper to read Node streams
+// ── Helper to read Node streams into a string ────────────────────────────
 async function streamToString(readable) {
-  let data = '';
-  for await (const chunk of readable) data += chunk.toString();
-  return data;
+  let str = '';
+  for await (const chunk of readable) {
+    str += chunk.toString();
+  }
+  return str;
 }
 
+// ── Main ─────────────────────────────────────────────────────────────────
 (async () => {
   const now   = new Date().toISOString();
   const price = await scrapeMarketPrice(CARD_NAME);
   console.log(`Scraped ${CARD_NAME} @ $${price}`);
-  await appendBlob({ timestamp: now, card_name: CARD_NAME, price_usd: price });
-  console.log(`Appended to blob: ${CARD_NAME}.json`);
+  const snapshot = { timestamp: now, card_name: CARD_NAME, price_usd: price };
+  await appendBlob(snapshot);
+  console.log(`Appended to blob: ${CARD_NAME}.json`, snapshot);
 })();

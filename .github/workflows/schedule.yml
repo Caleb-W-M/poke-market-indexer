@@ -12,8 +12,7 @@ jobs:
     env:
       AZURE_STORAGE_ACCOUNT: ${{ secrets.AZURE_STORAGE_ACCOUNT }}
       AZURE_STORAGE_KEY:     ${{ secrets.AZURE_STORAGE_KEY }}
-      CARD_NAME:             "Iono"                  
-      POKEMONTCG_API_KEY:    ${{ secrets.POKEMONTCG_API_KEY }}
+      CARD_NAME:             "Iono"
 
     steps:
       - name: Checkout code
@@ -24,8 +23,16 @@ jobs:
         with:
           node-version: '18'
 
+      - name: Cache npm
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('package.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
       - name: Install scraper dependencies
-        run: npm install
+        run: npm install --prefer-offline --no-audit --progress=false
 
       - name: Run Puppeteer scraper
         run: node scraper.js
