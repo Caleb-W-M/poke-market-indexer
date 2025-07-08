@@ -1,13 +1,12 @@
 // scraper.js
 import puppeteer from 'puppeteer-core';
 import { BlobServiceClient, StorageSharedKeyCredential } from '@azure/storage-blob';
-import { readFileSync } from 'fs';
 
 // ── CONFIG ───────────────────────────────────────────────────────────────
-const CARD_NAME = process.env.CARD_NAME || 'Iono';
-const ACCOUNT   = process.env.AZURE_STORAGE_ACCOUNT;
-const KEY       = process.env.AZURE_STORAGE_KEY;
-const CONTAINER = 'indexes';
+const CARD_NAME  = process.env.CARD_NAME || 'Iono';
+const ACCOUNT    = process.env.AZURE_STORAGE_ACCOUNT;
+const KEY        = process.env.AZURE_STORAGE_KEY;
+const CONTAINER  = 'indexes';
 const MAX_POINTS = 500;
 
 // ── Scrape the live “Market Price” from TCGplayer ────────────────────────
@@ -19,12 +18,31 @@ async function scrapeMarketPrice(name) {
   const page = await browser.newPage();
   const url  = `https://www.tcgplayer.com/search/all/product?q=${encodeURIComponent(name)}`;
   await page.goto(url, { waitUntil: 'networkidle2' });
-  await page.waitForSelector('.price-point--price', { timeout: 8000 });
-  const text = await page.$eval('.price-point--price', el => el.textContent.trim());
+
+  // Wait for any pricing labels to appear
+  await page.waitForSelector('.pricing__label', { timeout: 10000 });
+
+  // Extract the Market Price by finding the label then its sibling value
+  const priceText = await page.evaluate(() => {
+    const labels = document.querySelectorAll('.pricing__label');
+    for (const label of labels) {
+      if (label.textContent.trim() === 'Market Price') {
+        const val = label.nextElementSibling;
+        return val ? val.textContent.trim() : null;
+      }
+    }
+    return null;
+  });
+
   await browser.close();
 
-  const m = text.match(/[\d,]+\.?\d*/);
-  if (!m) throw new Error(`Could not parse price from "${text}"`);
+  if (!priceText) {
+    throw new Error(`Could not find Market Price for "${name}" on page`);
+  }
+  const m = priceText.match(/[\d,]+\.?\d*/);
+  if (!m) {
+    throw new Error(`Could not parse price from "${priceText}"`);
+  }
   return parseFloat(m[0].replace(/,/g, ''));
 }
 
